@@ -1,0 +1,14 @@
+paso 1: crear una cuenta en ngrok
+paso 2: copiar el Authtoken 2s2v0tpeeC1wQY4gZ0nyKaF9Fxw_4d2PwYW5Dw3Q62eZFwpGh
+Paso 3: !pip install pyngrok
+
+from pyngrok import ngrok
+ngrok.set_auth_token("2s2v0tpeeC1wQY4gZ0nyKaF9Fxw_4d2PwYW5Dw3Q62eZFwpGh")
+
+public_url = ngrok.connect(5000)
+print("URL pública:", public_url)
+URL pública: NgrokTunnel: "https://818c-34-68-5-40.ngrok-free.app" -> "http://localhost:5000"
+
+Paso 4: copiamos esa dirección pública y la pegamos en nuestra plataforma local
+        "https://818c-34-68-5-40.ngrok-free.app"
+
