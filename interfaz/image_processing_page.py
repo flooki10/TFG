@@ -1,408 +1,464 @@
 import customtkinter as ctk
-from PIL import Image,ImageDraw
+from PIL import Image
 from tkinter import filedialog, messagebox
-import requests,cv2
+import requests
 from io import BytesIO
-from skimage import measure, filters,color
+from skimage import measure, morphology
 import numpy as np
+import plotly.graph_objects as go
 from utils import create_styled_frame, create_styled_button, create_styled_label, create_styled_optionemenu, CustomTheme
 
-
+def hex_to_rgba(hex_color, alpha=0.2):
+    """Convierte un color hexadecimal a formato RGBA con opacidad alpha."""
+    hex_color = hex_color.lstrip("#")
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
 
 class ImageProcessingPage(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent)
         CustomTheme.apply(self)
         self.configure(fg_color=CustomTheme.COLORS["bg_primary"])
-        self.grid_columnconfigure(1, weight=1)  # Columna principal con peso 1
-        self.grid_rowconfigure(0, weight=1)  # Fila principal con peso 1
-
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        
+        # Imágenes y análisis
         self.original_image = None
-        self.processed_image = None
         self.segmented_image = None
-        self.show_values = False
+        self.analysis_image = None  # Imagen de análisis generada por Plotly (tamaño de referencia)
+        self.labels = None          # Matriz de etiquetas obtenida de la imagen segmentada
+        self.regions = {}           # Propiedades de cada célula
+        
+        # Tamaño objetivo para la visualización en modo nativo
+        self.target_size = None   # (width, height) a usar para todas las imágenes
+        
+        # Variables para conversión de coordenadas en el display
+        self.scale_x = self.scale_y = 1.0
+        self.displayed_image_size = (0, 0)
+        self.image_offset = (0, 0)
+        
+        # Variables para el tooltip flotante
+        self.current_highlighted_label = None  
+        self.base_image = None      # Imagen usada en modo "Values"
+        self.resized_display_image = None
+        
+        self.tooltip_window = None
 
         self.create_sidebar()
         self.create_main_content()
 
+    # Nueva función para crear el Label del contador de células alineado a la esquina superior izquierda
+    def _create_countlabel(self, parent):
+        label = ctk.CTkLabel(
+            parent, 
+            text="Número de células: 0", 
+            font=CustomTheme.FONTS["default"],
+            text_color="white", 
+            fg_color=CustomTheme.COLORS["primary"],
+            anchor="nw"  # Alineación superior izquierda
+        )
+        return label
+
+    # Función para los otros cuadros (resultados)
+    def _create_textbox(self, parent):
+        t = ctk.CTkTextbox(parent, height=100, width=250)
+        t.configure(
+            font=CustomTheme.FONTS["default"], 
+            text_color=CustomTheme.COLORS["text_light"],
+            fg_color=CustomTheme.COLORS["primary"]
+        )
+        return t
+
     def create_sidebar(self):
         sidebar = create_styled_frame(self)
-        sidebar.grid(row=0, column=0, sticky="nsew", padx=0, pady=0, rowspan=2)
-        sidebar.grid_rowconfigure((8, 9), weight=1)
+        sidebar.grid(row=0, column=0, sticky="nsew", rowspan=12)
+        # Configurar filas para una distribución compacta
+        for i in range(12):
+            sidebar.grid_rowconfigure(i, weight=0)
+        sidebar.grid_rowconfigure(10, weight=1)
+        sidebar.grid_rowconfigure(11, weight=1)
         sidebar.configure(fg_color=CustomTheme.COLORS["barra"], corner_radius=0)
-
-        title = create_styled_label(
-            sidebar,
-            text="Image Analysis",
+        
+        # Título
+        create_styled_label(
+            sidebar, 
+            text="Image Analysis", 
             font=CustomTheme.FONTS["title"],
             text_color=CustomTheme.COLORS["success"]
-        )
-        title.grid(row=0, column=0, pady=(20, 30), padx=20, sticky="ew")
-
-        # Model selection
-        model_label = create_styled_label(sidebar, text="Segmentation Model", font=CustomTheme.FONTS["subtitle"], text_color=CustomTheme.COLORS["text_light"])
-        model_label.grid(row=1, column=0, pady=(0, 5), padx=20, sticky="w")
+        ).grid(row=0, column=0, pady=(20,10), padx=20, sticky="ew")
         
+        # Modelo y umbral
+        create_styled_label(
+            sidebar, 
+            text="Segmentation Model", 
+            font=CustomTheme.FONTS["subtitle"],
+            text_color=CustomTheme.COLORS["text_light"]
+        ).grid(row=1, column=0, pady=(0,5), padx=20, sticky="w")
         self.model_var = ctk.StringVar(value="Modelos")
-        model_menu = create_styled_optionemenu(sidebar, variable=self.model_var, values=["TFGWalid_EG1"])
-        model_menu.grid(row=2, column=0, pady=(0, 20), padx=20, sticky="ew")
-
-        # Threshold slider
-        threshold_label = create_styled_label(sidebar, text="Segmentation Threshold", font=CustomTheme.FONTS["subtitle"], text_color=CustomTheme.COLORS["text_light"])
-        threshold_label.grid(row=3, column=0, pady=(0, 5), padx=20, sticky="w")
-        
+        create_styled_optionemenu(
+            sidebar, 
+            variable=self.model_var, 
+            values=["TFGWalid_EG1"]
+        ).grid(row=2, column=0, pady=(0,10), padx=20, sticky="ew")
+        create_styled_label(
+            sidebar, 
+            text="Segmentation Threshold", 
+            font=CustomTheme.FONTS["subtitle"],
+            text_color=CustomTheme.COLORS["text_light"]
+        ).grid(row=3, column=0, pady=(0,5), padx=20, sticky="w")
         self.threshold_var = ctk.DoubleVar(value=0.5)
-        threshold_slider = ctk.CTkSlider(sidebar, from_=0, to=1, number_of_steps=100, variable=self.threshold_var)
-        threshold_slider.grid(row=4, column=0, pady=(0, 20), padx=20, sticky="ew")
-
-        load_button = create_styled_button(sidebar, text="Load Image", command=self.upload_image)
-        load_button.grid(row=5, column=0, pady=(0, 10), padx=20, sticky="ew")
-
-        process_button = create_styled_button(sidebar, text="Process Image", command=self.process_image)
-        process_button.grid(row=6, column=0, pady=(0, 10), padx=20, sticky="ew")
-
-        # Botón para descargar la imagen procesada
-        self.download_button = create_styled_button(sidebar, text="Download Processed Image", command=self.download_processed_image, state="disabled")
-        self.download_button.grid(row=7, column=0, pady=(0, 10), padx=20, sticky="ew")
-
-        self.results_text = ctk.CTkTextbox(sidebar, height=150, width=250)
-        self.results_text.grid(row=9, column=0, pady=(0, 20), padx=20, sticky="nsew")
-        self.results_text.configure(font=CustomTheme.FONTS["default"], text_color=CustomTheme.COLORS["text_light"], fg_color=CustomTheme.COLORS["primary"])
-
-        self.cell_count_label = ctk.CTkTextbox(sidebar, height=150, width=250)
-        self.cell_count_label.grid(row=9, column=0, pady=(0, 20), padx=20, sticky="nsew")
-        self.cell_count_label.configure(font=CustomTheme.FONTS["default"], text_color=CustomTheme.COLORS["text_light"], fg_color=CustomTheme.COLORS["primary"])
+        ctk.CTkSlider(
+            sidebar, 
+            from_=0, 
+            to=1, 
+            number_of_steps=100, 
+            variable=self.threshold_var
+        ).grid(row=4, column=0, pady=(0,10), padx=20, sticky="ew")
+        
+        # Botones de carga y proceso
+        create_styled_button(
+            sidebar, 
+            text="Load Image", 
+            command=self.upload_image
+        ).grid(row=5, column=0, pady=(10,5), padx=20, sticky="ew")
+        create_styled_button(
+            sidebar, 
+            text="Process Image", 
+            command=self.process_image
+        ).grid(row=6, column=0, pady=(5,5), padx=20, sticky="ew")
+        create_styled_button(
+            sidebar, 
+            text="Show Analysis", 
+            command=self.show_analysis
+        ).grid(row=7, column=0, pady=(5,5), padx=20, sticky="ew")
+        
+        # Botones de descarga
+        create_styled_button(
+            sidebar, 
+            text="Download Processed Image", 
+            command=self.download_processed_image
+        ).grid(row=8, column=0, pady=(5,5), padx=20, sticky="ew")
+        create_styled_button(
+            sidebar, 
+            text="Download Analysis Image", 
+            command=self.download_analysis_image
+        ).grid(row=9, column=0, pady=(5,5), padx=20, sticky="ew")
+        
+        # Cuadros de resultados y contador
+        self.results_text = self._create_textbox(sidebar)
+        self.results_text.grid(row=10, column=0, pady=(5,5), padx=20, sticky="nsew")
+        self.cell_count_label = self._create_countlabel(sidebar)
+        self.cell_count_label.grid(row=11, column=0, pady=(5,20), padx=20, sticky="nsew")
 
     def create_main_content(self):
         main_frame = create_styled_frame(self)
-        main_frame.grid(row=0, column=1, sticky="nsew", padx=20, pady=20, rowspan=2)
+        main_frame.grid(row=0, column=1, sticky="nsew", padx=20, pady=20, rowspan=12)
         main_frame.grid_columnconfigure(0, weight=1)
         main_frame.grid_rowconfigure(1, weight=1)
-
-        # Fila de controles (Original, Processed, Values)
         controls_frame = create_styled_frame(main_frame)
-        controls_frame.grid(row=0, column=0, sticky="ew", pady=(0, 10))
-        controls_frame.grid_columnconfigure((0, 1, 2), weight=1)
-
+        controls_frame.grid(row=0, column=0, sticky="ew", pady=(0,10))
+        controls_frame.grid_columnconfigure((0,1,2), weight=1)
         self.view_mode = ctk.StringVar(value="Original")
-        self.original_radio = ctk.CTkRadioButton(controls_frame, text="Original", variable=self.view_mode, value="Original", command=self.show_original_image)
-        self.original_radio.grid(row=0, column=0, padx=10, pady=10, sticky="w")
-
-        self.processed_radio = ctk.CTkRadioButton(controls_frame, text="Processed", variable=self.view_mode, value="Processed", command=self.show_processed_image)
-        self.processed_radio.grid(row=0, column=1, padx=10, pady=10, sticky="w")
-
-        self.values_radio = ctk.CTkRadioButton(controls_frame, text="Values", variable=self.view_mode, value="Values", command=self.show_values_image)
-        self.values_radio.grid(row=0, column=2, padx=10, pady=10, sticky="w")
-
-        # Panel de imágenes
-        self.image_frame = create_styled_frame(main_frame)
-        self.image_frame.grid(row=1, column=0, sticky="nsew")
-        self.image_frame.grid_columnconfigure(0, weight=1)
-        self.image_frame.grid_rowconfigure(0, weight=1)
-
-        # Etiqueta para mostrar la imagen (original, procesada o valores)
-        self.image_label = ctk.CTkLabel(self.image_frame, text="", fg_color=CustomTheme.COLORS["bg_secondary"])
+        for i, (txt, val, cmd) in enumerate([
+            ("Original", "Original", self.show_original_image),
+            ("Processed", "Processed", self.show_processed_image),
+            ("Values", "Values", self.show_values_image)
+        ]):
+            ctk.CTkRadioButton(
+                controls_frame, 
+                text=txt, 
+                variable=self.view_mode, 
+                value=val, 
+                command=cmd
+            ).grid(row=0, column=i, padx=10, pady=10, sticky="w")
+        self.display_frame = create_styled_frame(main_frame)
+        self.display_frame.grid(row=1, column=0, sticky="nsew")
+        self.display_frame.grid_rowconfigure(0, weight=1)
+        self.display_frame.grid_columnconfigure(0, weight=1)
+        self.image_label = ctk.CTkLabel(
+            self.display_frame, 
+            text="", 
+            fg_color=CustomTheme.COLORS["bg_secondary"]
+        )
         self.image_label.grid(row=0, column=0, sticky="nsew")
+        # Se usará una ventana flotante para el tooltip
 
-        # Etiqueta para mostrar los valores de las células
-        self.value_label = ctk.CTkLabel(self.image_frame, text="", fg_color=CustomTheme.COLORS["bg_secondary"])
-        self.value_label.grid(row=1, column=0, sticky="nsew")
+    # ------------------ Métodos de Visualización ------------------
+    def _update_image_label(self, img, w, h):
+        im = ctk.CTkImage(img, size=(w, h))
+        self.image_label.configure(image=im, text="")
+        self.image_label.image = im
+
+    def display_image(self, img, use_native_size=False):
+        """
+        Si use_native_size es True se muestra la imagen usando el tamaño objetivo (self.target_size)
+        si ya se definió; de lo contrario, se usa el tamaño nativo de la imagen.
+        Esto garantiza que todas las imágenes se visualicen con las mismas dimensiones.
+        """
+        if use_native_size:
+            if self.target_size is not None:
+                new_w, new_h = self.target_size
+            else:
+                new_w, new_h = img.width, img.height
+            offset_x, offset_y = 0, 0
+        else:
+            lw, lh = self.image_label.winfo_width(), self.image_label.winfo_height()
+            if lw <= 1 or lh <= 1:
+                return
+            image_aspect = img.width / img.height
+            label_aspect = lw / lh
+            if image_aspect > label_aspect:
+                new_w = lw
+                new_h = int(lw / image_aspect)
+                offset_x = 0
+                offset_y = (lh - new_h) // 2
+            else:
+                new_h = lh
+                new_w = int(lh * image_aspect)
+                offset_y = 0
+                offset_x = (lw - new_w) // 2
+        self.scale_x = img.width / new_w
+        self.scale_y = img.height / new_h
+        self.displayed_image_size = (new_w, new_h)
+        self.image_offset = (offset_x, offset_y)
+        resized_img = img.resize((new_w, new_h), Image.LANCZOS)
+        self.resized_display_image = resized_img
+        self._update_image_label(resized_img, new_w, new_h)
 
     def show_original_image(self):
-        """Muestra la imagen original."""
         if self.original_image:
-            self.display_highlighted_image(self.original_image)
+            self.display_image(self.original_image, use_native_size=True)
+            self.image_label.unbind("<Motion>")
+            self.hide_tooltip()
 
     def show_processed_image(self):
-        """Muestra la imagen procesada."""
-        if self.processed_image:
-            self.display_highlighted_image(self.processed_image)
+        if self.segmented_image:
+            self.display_image(self.segmented_image, use_native_size=True)
+            self.image_label.unbind("<Motion>")
+            self.hide_tooltip()
 
     def show_values_image(self):
-        """Muestra la imagen segmentada y habilita la visualización de valores."""
-        if self.segmented_image:
-            self.display_highlighted_image(self.segmented_image)
+        self.base_image = self.analysis_image if self.analysis_image else self.segmented_image
+        if self.base_image:
+            self.display_image(self.base_image, use_native_size=True)
+            self.current_highlighted_label = None
             self.image_label.bind("<Motion>", self.show_cell_value)
 
-    def toggle_values(self):
-        """Activa o desactiva la visualización de los valores y el resaltado de células."""
-        if self.segmented_image:
-            self.show_values = not self.show_values
-            if self.show_values:
-                self.image_label.bind("<Motion>", self.show_cell_value)
-            else:
-                self.image_label.unbind("<Motion>")
-                self.value_label.configure(text="")
-                self.display_highlighted_image(self.segmented_image)
+    # ------------------ Método de Análisis ------------------
+    def show_analysis(self):
+        if self.original_image is None or self.segmented_image is None:
+            return messagebox.showerror("Error", "Please load and process an image first.")
+        try:
+            # Convertir la imagen original a escala de grises
+            img_gray = np.array(self.original_image.convert('L'))
+            # Usar la imagen segmentada para obtener los labels (se asume que es etiquetada)
+            labels = np.array(self.segmented_image.convert('I'))
+            self.labels = labels
 
+            # Extraer propiedades de cada región
+            self.regions = {}
+            for prop in measure.regionprops(labels, img_gray):
+                self.regions[prop.label] = {
+                    'area': prop.area,
+                    'eccentricity': prop.eccentricity,
+                    'perimeter': prop.perimeter,
+                    'intensity_mean': prop.intensity_mean
+                }
 
+            # Paleta de colores para contornos
+            colors = [
+                "#636EFA", "#EF553B", "#00CC96", "#AB63FA", "#FFA15A",
+                "#19D3F3", "#FF6692", "#B6E880", "#FF97FF", "#FECB52",
+                "#A3A500", "#00A08A", "#FFB500", "#6A4C93"
+            ]
+
+            # Obtener dimensiones de la imagen original
+            w_orig, h_orig = self.original_image.size
+            print(f"Original dimensions: width={w_orig}, height={h_orig}")
+
+            # Crear figura usando traza Heatmap sin márgenes
+            fig = go.Figure(data=go.Heatmap(
+                z=img_gray,
+                colorscale='gray',
+                showscale=False,
+                zmin=0,
+                zmax=255
+            ))
+            fig.update_layout(
+                autosize=False,
+                width=w_orig,
+                height=h_orig,
+                margin=dict(l=0, r=0, t=0, b=0),
+                paper_bgcolor="white",
+                plot_bgcolor="white"
+            )
+            fig.update_xaxes(visible=False, showgrid=False, zeroline=False, range=[0, w_orig], constrain='domain')
+            fig.update_yaxes(visible=False, showgrid=False, zeroline=False, range=[0, h_orig],
+                             autorange="reversed", constrain='domain', scaleanchor="x", scaleratio=1)
+
+            # Agregar contornos para cada región con relleno transparente y borde visible
+            for i, prop in enumerate(measure.regionprops(labels, img_gray)):
+                cnts = measure.find_contours(labels == prop.label, 0.5)
+                if cnts:
+                    y, x = cnts[0].T
+                    hoverinfo = ''.join(
+                        f'<b>{p}: {getattr(prop, p):.2f}</b><br>'
+                        for p in ['area', 'eccentricity', 'perimeter', 'intensity_mean']
+                    )
+                    color = colors[i % len(colors)]
+                    fill_color = hex_to_rgba(color, alpha=0.2)
+                    fig.add_trace(go.Scatter(
+                        x=x,
+                        y=y,
+                        mode='lines',
+                        fill='toself',
+                        line=dict(color=color),
+                        fillcolor=fill_color,
+                        showlegend=False,
+                        hovertemplate=hoverinfo,
+                        hoveron='points+fills'
+                    ))
+            # Exportar la figura a imagen EXACTAMENTE con dimensiones originales
+            img_bytes = fig.to_image(format="png", width=w_orig, height=h_orig, scale=1)
+            analysis_img = Image.open(BytesIO(img_bytes))
+            print(f"Analysis image dimensions (exported): width={analysis_img.width}, height={analysis_img.height}")
+            if analysis_img.width != w_orig:
+                new_img = Image.new("RGB", (w_orig, h_orig), "white")
+                offset_x = (w_orig - analysis_img.width) // 2
+                new_img.paste(analysis_img, (offset_x, 0))
+                analysis_img = new_img
+                print("Adjusted analysis image width.")
+            print(f"Final analysis image dimensions: width={analysis_img.width}, height={analysis_img.height}")
+            self.analysis_image = analysis_img
+            self.target_size = (analysis_img.width, analysis_img.height)
+
+            # Actualizar el label del contador de células
+            self.cell_count_label.configure(text=f"Número de células: {len(self.regions)}")
+
+            if self.view_mode.get() == "Values":
+                self.show_values_image()
+
+        except Exception as e:
+            messagebox.showerror("Analysis Error", f"Error during analysis: {e}")
+
+    # ------------------ Métodos para el Tooltip ------------------
+    def show_tooltip(self, text, x, y):
+        self.hide_tooltip()
+        self.tooltip_window = ctk.CTkToplevel(self)
+        self.tooltip_window.overrideredirect(True)
+        self.tooltip_window.configure(bg="white")
+        label = ctk.CTkLabel(self.tooltip_window, text=text, fg_color="white", text_color="black", font=CustomTheme.FONTS["default"])
+        label.pack(padx=5, pady=5)
+        self.tooltip_window.geometry(f"+{x+10}+{y+10}")
+
+    def hide_tooltip(self):
+        if self.tooltip_window is not None:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+
+    def get_cell_label(self, x, y):
+        # En modo nativo se usa self.target_size para conversión sin offsets
+        new_w, new_h = self.target_size if self.target_size is not None else (self.segmented_image.width, self.segmented_image.height)
+        scale_x = self.segmented_image.width / new_w
+        scale_y = self.segmented_image.height / new_h
+        image_x = int(x * scale_x)
+        image_y = int(y * scale_y)
+        if image_x < 0 or image_x >= self.segmented_image.width or image_y < 0 or image_y >= self.segmented_image.height:
+            return None
+        return self.labels[image_y, image_x]
 
     def show_cell_value(self, event):
-        """Muestra el valor de la célula bajo el cursor y la resalta."""
-        if self.segmented_image:
-            x, y = event.x, event.y
-            cell_value = self.get_cell_value(x, y)
-            if cell_value is not None:
-                self.value_label.configure(text=f"Value: {cell_value}")
-                self.highlight_cell(x, y)  # Resaltar la célula
-            else:
-                self.value_label.configure(text="Background")
-                self.display_highlighted_image(self.segmented_image)  # Restaurar la imagen original
-
-    def get_cell_value(self, x, y):
-        """Obtiene el valor de la célula en (x, y) con corrección de posición y escalado."""
-        if not self.segmented_image:
-            return None
-
-        # Dimensiones del widget y de la imagen mostrada
-        label_width = self.image_label.winfo_width()
-        label_height = self.image_label.winfo_height()
-        img_width, img_height = self.segmented_image.size
-
-        # Verificar si las dimensiones del widget son válidas
-        if label_width <= 1 or label_height <= 1:
-            return None
-
-        # Calcular las proporciones de escalado utilizadas
-        image_ratio = img_width / img_height
-        label_ratio = label_width / label_height
-
-        if image_ratio > label_ratio:
-            # La imagen se ajusta en ancho
-            scale_factor = img_width / label_width
-            offset_y = (label_height - (img_height / scale_factor)) / 2
-            offset_x = 0
+        label = self.get_cell_label(event.x, event.y)
+        if label == self.current_highlighted_label:
+            return
+        self.current_highlighted_label = label
+        if label and label in self.regions:
+            props = self.regions[label]
+            tooltip_text = f"Cell {label}:\n" + "\n".join([f"{k}: {v:.2f}" for k, v in props.items()])
+            self.show_tooltip(tooltip_text, event.x_root, event.y_root)
         else:
-            # La imagen se ajusta en altura
-            scale_factor = img_height / label_height
-            offset_x = (label_width - (img_width / scale_factor)) / 2
-            offset_y = 0
+            self.hide_tooltip()
 
-        # Ajustar las coordenadas del cursor
-        img_x = int((x - offset_x) * scale_factor)
-        img_y = int((y - offset_y) * scale_factor)
-
-        # Verificar si las coordenadas ajustadas están dentro de la imagen
-        if img_x < 0 or img_x >= img_width or img_y < 0 or img_y >= img_height:
-            return None
-
-        # Obtener el valor del píxel
-        return self.segmented_image.getpixel((img_x, img_y))
-
-
-    def get_cell_value(self, x, y):
-        """Obtiene el valor de la célula en la posición (x, y) del cursor, ajustando por escalado."""
-        if not self.segmented_image:
-            return None
-
-        # Ajustar las coordenadas del cursor según la escala
-        img_x = int(x * self.scale_x)
-        img_y = int(y * self.scale_y)
-
-        # Verificar si las coordenadas están dentro de la imagen
-        img_width, img_height = self.segmented_image.size
-        if 0 <= img_x < img_width and 0 <= img_y < img_height:
-            pixel_value = self.segmented_image.getpixel((img_x, img_y))
-
-            # Considerar un umbral para distinguir el fondo
-            background_threshold = 10
-            return pixel_value if pixel_value > background_threshold else None
-
-        return None
-
-
-    def highlight_cell(self, x, y):
-        """Resalta la célula con el color original de la imagen."""
-        if not self.segmented_image:
-            return
-
-        # Copiar la imagen segmentada
-        highlighted_image = self.segmented_image.copy()
-        img_array = np.array(highlighted_image)
-
-        # Obtener el valor de la célula en las coordenadas proporcionadas
-        cell_value = self.get_cell_value(x, y)
-        
-        if cell_value is None:  # Si es fondo, no hacer nada
-            return
-
-        # Resaltar la célula en el color original
-        mask = np.all(img_array == cell_value, axis=-1)  # Mascaramos la célula por su color
-        img_array[mask] = [0, 0, 255]  # Resaltamos la célula con color azul, por ejemplo
-
-        # Convertir el array de nuevo a una imagen
-        highlighted_image = Image.fromarray(img_array)
-
-        # Redimensionar la imagen para ajustarse al espacio disponible en el label
-        label_width = self.image_label.winfo_width()
-        label_height = self.image_label.winfo_height()
-
-        # Redimensionar la imagen para ajustarse al tamaño del label
-        highlighted_image = highlighted_image.resize((label_width, label_height), Image.LANCZOS)
-        
-        # Convertir la imagen a un objeto CTkImage para el widget
-        ctk_image = ctk.CTkImage(highlighted_image, size=(label_width, label_height))
-        
-        # Mostrar la imagen resaltada en el label
-        self.image_label.configure(image=ctk_image, text="")
-        self.image_label.image = ctk_image
-
-
-    
-    def display_highlighted_image(self, highlighted_image):
-        """Muestra la imagen destacada en el image_label, ajustando su tamaño al espacio disponible."""
-        # Redimensionar la imagen para que se ajuste al espacio disponible
-        label_width = self.image_label.winfo_width()
-        label_height = self.image_label.winfo_height()
-
-        if label_width > 1 and label_height > 1:  # Evitar divisiones por cero
-            image_ratio = highlighted_image.width / highlighted_image.height
-            label_ratio = label_width / label_height
-
-            if image_ratio > label_ratio:
-                new_width = label_width
-                new_height = int(label_width / image_ratio)
-            else:
-                new_height = label_height
-                new_width = int(label_height * image_ratio)
-
-            # Guardar las escalas de redimensionamiento
-            self.scale_x = highlighted_image.width / new_width
-            self.scale_y = highlighted_image.height / new_height
-
-            # Redimensionar la imagen
-            resized_image = highlighted_image.resize((new_width, new_height), Image.LANCZOS)
-            ctk_image = ctk.CTkImage(resized_image, size=(new_width, new_height))
-            self.image_label.configure(image=ctk_image, text="")
-            self.image_label.image = ctk_image
-
-
-    def display_image(self, image):
-        """Muestra una imagen en el image_label, ajustando su tamaño al espacio disponible."""
-        # Redimensionar la imagen para que se ajuste al espacio disponible
-        label_width = self.image_label.winfo_width()
-        label_height = self.image_label.winfo_height()
-
-        if label_width > 1 and label_height > 1:  # Evitar divisiones por cero
-            image_ratio = image.width / image.height
-            label_ratio = label_width / label_height
-
-            if image_ratio > label_ratio:
-                new_width = label_width
-                new_height = int(label_width / image_ratio)
-            else:
-                new_height = label_height
-                new_width = int(label_height * image_ratio)
-
-            # Guardar las escalas de redimensionamiento
-            self.scale_x = image.width / new_width
-            self.scale_y = image.height / new_height
-
-            # Redimensionar la imagen
-            resized_image = image.resize((new_width, new_height), Image.LANCZOS)
-            ctk_image = ctk.CTkImage(resized_image, size=(new_width, new_height))
-            self.image_label.configure(image=ctk_image, text="")
-            self.image_label.image = ctk_image  # Evitar garbage collection
-
-    def show_original_image(self):
-        """Muestra la imagen original."""
-        if hasattr(self, "original_image"):
-            self.display_highlighted_image(self.original_image)
-
-    def show_processed_image(self):
-        """Muestra la imagen procesada."""
-        if hasattr(self, "segmented_image"):
-            self.display_highlighted_image(self.segmented_image)
-
-
+    # ------------------ Métodos de Carga y Procesado de Imagen ------------------
     def upload_image(self):
-        # Seleccionar archivo
-        file_path = filedialog.askopenfilename(filetypes=[("Imagen TIFF", "*.tiff")])
-        if not file_path:
+        fp = filedialog.askopenfilename(filetypes=[("Imagen TIFF", "*.tiff")])
+        if not fp:
             return
-
-        # Cargar y mostrar la imagen original
-        self.original_image = Image.open(file_path)
-        # Mostrar un mensaje de éxito
+        self.original_image = Image.open(fp)
         self.results_text.delete("1.0", ctk.END)
         self.results_text.insert(ctk.END, "Image loaded successfully.\n")
-        #Mostrar la imagen
-        self.display_highlighted_image(self.original_image)
-
-        # Guardar la ruta del archivo para procesamiento
-        self.file_path = file_path
+        self.display_image(self.original_image, use_native_size=True)
+        self.file_path = fp
 
     def process_image(self):
         if not hasattr(self, "file_path"):
             self.results_text.delete("1.0", ctk.END)
             self.results_text.insert(ctk.END, "Please load an image first.\n")
             return
-
-        # Enviar imagen a la API
-        response = self.send_to_api(self.file_path)
-        if response is not None:
-            # Mostrar resultados
-            segmented_image_url = response["segmented_image_url"]
-            cell_count = response["cell_count"]
-
-            # Descargar la imagen segmentada desde la URL
-            segmented_image = self.download_image(segmented_image_url)
-
-            # Guardar y mostrar la imagen procesada
-            if segmented_image:
-                self.segmented_image = segmented_image
-                self.display_highlighted_image(self.segmented_image)
-                self.download_button.configure(state="normal")  # Habilitar el botón de descarga
-
-            # Mostrar número de células
-            self.cell_count_label.delete("1.0", ctk.END)
-            self.cell_count_label.insert(ctk.END, f"Número de células: {cell_count}. \n")
-
+        resp = self.send_to_api(self.file_path)
+        if resp:
+            seg_url, cnt = resp["segmented_image_url"], resp["cell_count"]
+            seg = self.download_image(seg_url)
+            if seg:
+                self.segmented_image = seg
+                self.display_image(self.segmented_image, use_native_size=True)
+                self.download_button.configure(state="normal")
+            self.cell_count_label.configure(text=f"Número de células: {cnt}")
+            
     def download_processed_image(self):
-        """Guarda la imagen procesada en el dispositivo del usuario."""
         if hasattr(self, "segmented_image"):
-            file_path = filedialog.asksaveasfilename(
-                defaultextension=".png",
-                filetypes=[("PNG files", "*.png"), ("All files", "*.*")]
-            )
-            if file_path:
+            fp = filedialog.asksaveasfilename(defaultextension=".png",
+                                                filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
+            if fp:
                 try:
-                    self.segmented_image.save(file_path)
+                    self.segmented_image.save(fp)
                     messagebox.showinfo("Success", "Processed image saved successfully!")
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to save image: {e}")
         else:
             messagebox.showwarning("Warning", "No processed image available to download.")
 
+    def download_analysis_image(self):
+        if self.analysis_image is not None:
+            fp = filedialog.asksaveasfilename(defaultextension=".png",
+                                                filetypes=[("PNG files", "*.png"), ("All files", "*.*")])
+            if fp:
+                try:
+                    self.analysis_image.save(fp)
+                    messagebox.showinfo("Success", "Analysis image saved successfully!")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save analysis image: {e}")
+        else:
+            messagebox.showwarning("Warning", "No analysis image available to download.")
 
-
-    def send_to_api(self, file_path):
-        api_url = "https://8856-35-240-237-146.ngrok-free.app/predict"  # Cambia TU_NGROK_URL con tu URL de ngrok
+    def send_to_api(self, fp):
+        url = "https://8093-34-126-118-125.ngrok-free.app/predict"
         try:
-            with open(file_path, "rb") as file:
-                files = {"image": file}
-                response = requests.post(api_url, files=files)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                print("Error en la API:", response.text)
-                return None
+            with open(fp, "rb") as f:
+                r = requests.post(url, files={"image": f})
+            return r.json() if r.status_code == 200 else (print("API Error:", r.text) or None)
         except Exception as e:
-            print(f"Error al enviar la imagen a la API: {e}")
+            print(f"API Error: {e}")
             return None
 
     def download_image(self, url):
-        """
-        Descarga la imagen desde la URL y la devuelve como un objeto Image.
-        """
         try:
-            response = requests.get(url)
-            if response.status_code == 200:
-                image_data = BytesIO(response.content)
-                return Image.open(image_data)
-            else:
-                print(f"Error al descargar la imagen: {response.status_code}")
-                return None
+            r = requests.get(url)
+            return Image.open(BytesIO(r.content)) if r.status_code == 200 else (print(f"Download error: {r.status_code}") or None)
         except Exception as e:
-            print(f"Error al descargar la imagen: {e}")
+            print(f"Download error: {e}")
             return None
+
+    def on_leave(self, event):
+        self.hide_tooltip()
+        self.current_highlighted_label = None
+
+if __name__ == "__main__":
+    root = ctk.CTk()
+    root.title("Image Processing App")
+    app = ImageProcessingPage(root)
+    app.pack(expand=True, fill="both")
+    app.image_label.bind("<Leave>", app.on_leave)
+    root.mainloop()
