@@ -11,9 +11,9 @@ _Proyecto de investigación y análisis de imágenes biomédicas_
 
 Para hacer más accesible esta solución tecnológica y simplificar el trabajo de los profesionales de la salud, se diseñó una aplicación de escritorio de segmentación de células a partir de imágenes FISH. Posteriormente, el modelo entrenado fue integrado en Google Colab a esta aplicación mediante una API, optimizando el flujo de trabajo en el entorno de laboratorio.
 
-Superposición de la imagen segmentada sobre la imagen Groudtruth original
+### Superposición de la imagen segmentada sobre la imagen Groudtruth original
 
-|       ![Alt img](https://github.com/flooki10/TFG/blob/main/superposition.png) | 
+![Alt img](https://github.com/flooki10/TFG/blob/main/superposition.png)
 ---
 
 ## 2. **Objetivos**
