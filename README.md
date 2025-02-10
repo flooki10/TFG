@@ -61,8 +61,11 @@ Root
   
 ## 5. **Entrenar el modelo**
 Para entrenar el/los modelo(s) mencionados en el artículo, ejecuta el siguiente comando:
+```bash
 python /content/MEDIAR/main.py --config_path="/content/MEDIAR/config/mediar_example.json"
-
+```
 ## 6. **Visualizar las predicciones**
 Para realizar predicciones en los casos de prueba, ejecuta el siguiente comando:
+```bash
 python /content/MEDIAR/predict.py --config_path=<path_to_config>
+```
