@@ -1,9 +1,7 @@
 ![Banner](https://github.com/flooki10/TFG/blob/main/banner.png)
 
 
-# 📊 [Título del Proyecto]
-
-**Segmentación automática de células en imágenes FISH**  
+# 📊 Segmentación automática de células en imágenes FISH
 _Proyecto de investigación y análisis de imágenes biomédicas_
 
 ---
