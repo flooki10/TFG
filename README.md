@@ -14,9 +14,10 @@ Para hacer más accesible esta solución tecnológica y simplificar el trabajo d
 ---
 
 ## 2. **Objetivos**
-- [ ] Implementar un modelo eficiente para segmentación de células en imágenes FISH 3D.
+- [ ] Implementar un modelo eficiente para segmentación de células en imágenes FISH.
 - [ ] Contar automáticamente el número de células segmentadas.
-- [ ] Analizar fluorescencias de color verde y rojo para cada célula.
+- [ ] Crear contornos para las células segmentadas.
+- [ ] Extraer características morfológicas de las células, como el área, perímetro y forma.
 
 ---
 
@@ -25,8 +26,8 @@ Para hacer más accesible esta solución tecnológica y simplificar el trabajo d
 - **Framework:** PyTorch
 - **Modelo:** MEDIAR para segmentación de imágenes
 - **Backend:** Flask
-- **Base de datos:** MongoDB
-- **Frontend:** React
+- **Frontend:** Customtkinter
+- **API:** Ngrok
 
 ---
 
@@ -41,6 +42,7 @@ project-root/
 ├── models/                  # Pesos del modelo entrenado
 ├── README.md                # Este archivo
 └── requirements.txt         # Dependencias del proyecto
+
 
 In order to improve the diagnosis of oligodendroglioma, a cell segmentation model was developed based on machine learning through fine-tuning and supervised training. This approach not only allows for the precise counting of cells in images but also differentiates between adjacent cells using instance segmentation, addressing a common challenge in manual analysis. Currently, this process is performed manually by healthcare professionals using nuclear staining and in situ hybridization images.
 
