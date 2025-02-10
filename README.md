@@ -13,7 +13,7 @@ Para hacer más accesible esta solución tecnológica y simplificar el trabajo d
 
 Superposición de la imagen segmentada sobre la imagen Groudtruth original
 
-| ![Alt img](https://github.com/flooki10/TFG/blob/main/superposition.png) | 
+|       ![Alt img](https://github.com/flooki10/TFG/blob/main/superposition.png) | 
 ---
 
 ## 2. **Objetivos**
