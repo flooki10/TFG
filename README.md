@@ -43,6 +43,7 @@ Para hacer más accesible esta solución tecnológica y simplificar el trabajo d
 ---
 
 ## 4. **Estructura de datos**
+```bash
 Root
   ├── Datasets
   │   ├── images (images can have various extensions: .tif, .tiff, .png, .bmp ...)
@@ -56,6 +57,8 @@ Root
   │   │    ├── cell_00003.label.tiff
   │   │    ├── ...
   └── ...
+```
+  
 ## 5. **Entrenar el modelo**
 Para entrenar el/los modelo(s) mencionados en el artículo, ejecuta el siguiente comando:
 python /content/MEDIAR/main.py --config_path="/content/MEDIAR/config/mediar_example.json"
