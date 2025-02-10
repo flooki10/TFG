@@ -31,24 +31,7 @@ Para hacer más accesible esta solución tecnológica y simplificar el trabajo d
 
 ---
 
-## 4. **Estructura del Proyecto**
+## 4. **Fuentes propias del Proyecto**
 ```bash
-project-root/
-├── src/
-│   ├── data_processing.py   # Procesamiento de datos
-│   ├── model_training.py    # Entrenamiento del modelo
-│   ├── inference.py         # Segmentación de imágenes
-│   └── visualization.py     # Visualización de resultados
-├── models/                  # Pesos del modelo entrenado
-├── README.md                # Este archivo
-└── requirements.txt         # Dependencias del proyecto
-
-
-In order to improve the diagnosis of oligodendroglioma, a cell segmentation model was developed based on machine learning through fine-tuning and supervised training. This approach not only allows for the precise counting of cells in images but also differentiates between adjacent cells using instance segmentation, addressing a common challenge in manual analysis. Currently, this process is performed manually by healthcare professionals using nuclear staining and in situ hybridization images.
-
-To make this technological solution more accessible and simplify the work of healthcare professionals, a desktop application for cell segmentation from FISH images was designed. Subsequently, the trained model was integrated from Google Colab into this application via an API, optimizing the workflow in the laboratory environment.
-
-![Plan General](https://github.com/flooki10/TFG/blob/main/planificaci%C3%B3n_TFG.png)
-
-## Acceder al fichero estudio_calidad.ipynb en la carpeta estudio_calidad para más detalles sobre los resultados
-![Resultados](https://github.com/flooki10/TFG/blob/main/superposici%C3%B3n_original_segmentada.png)
+- Visualizar las predicciones https://www.dropbox.com/scl/fi/0xhvpypr6w5d8hs7bf1g4/ejecucion_local.zip?rlkey=4m09gpca0suau43j90uaq8iqd&st=uq5mgke2&dl=0
+- Entrenar el modelo https://www.dropbox.com/scl/fi/0oq3e0tslsbetnzics9lg/MEDIAR.zip?rlkey=jp0avsefnlopj8jqy7kzhdw4s&st=pt2av0cm&dl=0
