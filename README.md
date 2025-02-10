@@ -11,6 +11,7 @@ _Proyecto de investigación y análisis de imágenes biomédicas_
 
 Para hacer más accesible esta solución tecnológica y simplificar el trabajo de los profesionales de la salud, se diseñó una aplicación de escritorio de segmentación de células a partir de imágenes FISH. Posteriormente, el modelo entrenado fue integrado en Google Colab a esta aplicación mediante una API, optimizando el flujo de trabajo en el entorno de laboratorio.
 
+![img](https://github.com/flooki10/TFG/blob/main/superposici%C3%B3n_original_segmentada.png)
 ---
 
 ## 2. **Objetivos**
