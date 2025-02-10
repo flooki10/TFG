@@ -40,7 +40,7 @@ Para hacer más accesible esta solución tecnológica y simplificar el trabajo d
 
 ---
 
-## 4. **Fuentes propias del Proyecto**
+## 4. **Fuentes propias para ejecutar el Proyecto**
 ```bash
 - Visualizar las predicciones https://www.dropbox.com/scl/fi/0xhvpypr6w5d8hs7bf1g4/ejecucion_local.zip?rlkey=4m09gpca0suau43j90uaq8iqd&st=uq5mgke2&dl=0
 - Entrenar el modelo https://www.dropbox.com/scl/fi/0oq3e0tslsbetnzics9lg/MEDIAR.zip?rlkey=jp0avsefnlopj8jqy7kzhdw4s&st=pt2av0cm&dl=0
