@@ -1,0 +1,134 @@
+# Clone MEDIAR github repo
+!git clone https://github.com/Lee-Gihun/MEDIAR.git
+%rm -rf ./sample_data
+%cd MEDIAR
+
+# # Install dependencies
+%pip install -r requirements.txt
+%pip install segmentation-models-pytorch==0.3.1
+%pip install wandb
+!wandb off
+-------------------------------------------
+
+# Download MEDIAR pretrained weights
+%mkdir weights
+!gdown https://drive.google.com/uc?id=168MtudjTMLoq9YGTyoD2Rjl_d3Gy6c_L -O weights/from_phase1.pth
+!gdown https://drive.google.com/uc?id=1JJ2-QKTCk-G7sp5ddkqcifMxgnyOrXjx -O weights/from_phase2.pth
+
+model_path1 = "./weights/from_phase1.pth"
+model_path2 = "./weights/from_phase2.pth"
+
+import torch
+weights1 = torch.load(model_path1, map_location="cpu")
+weights2 = torch.load(model_path2, map_location="cpu")
+
+---------------------------------------------------
+
+!python /content/MEDIAR/generate_mapping.py --root="/content/dataset"
+
+------------------------------------------------------------------
+!python /content/MEDIAR/main.py --config_path="/content/MEDIAR/config/mediar_example.json"
+
+------------------------------------------------------------
+# Definir ruta de tu modelo
+model_path = "/content/TFGWalid_EG.pth" 
+
+# Cargar el modelo desde la ruta especificada
+import torch
+from train_tools.models import MEDIARFormer
+
+# Definir los parámetros del modelo según tu configuración
+model_args = {
+    "classes": 3,
+    "decoder_channels": [1024, 512, 256, 128, 64],
+    "decoder_pab_channels": 256,
+    "encoder_name": 'mit_b5',
+    "in_channels": 3
+}
+
+# Crear una instancia del modelo
+model = MEDIARFormer(**model_args)
+
+# Cargar los pesos del modelo desde la ruta proporcionada
+weights = torch.load(model_path, map_location="cpu")
+model.load_state_dict(weights, strict=False)
+
+# Definir ruta de imágenes de entrada
+input_path = "/content/img/"  # Ruta de las imágenes
+
+# Definir ruta de salida para las predicciones
+output_path = "/content/img/"
+
+# Crear predictor para realizar las predicciones
+from core.MEDIAR import Predictor
+
+# Usar el predictor para hacer la predicción
+predictor = Predictor(model, "cuda:0", input_path, output_path, algo_params={"use_tta": False})
+_ = predictor.conduct_prediction()
+
+# Cargar y mostrar la imagen de predicción
+import skimage.io as io
+import numpy as np
+
+# Ejemplo de cómo cargar una de las predicciones generadas
+pred1 = io.imread(f"{output_path}/cell_00006_label.tiff")
+io.imshow(pred1, cmap="cividis")
+
+# Contar las células (excluyendo el fondo)
+cell_count = len(np.unique(pred1)) - 1  # Excluir el fondo
+print(f"\n{cell_count} Cells detected!")
+
+
+
+#########################################
+MODELO+TTA
+#########################################
+
+
+# Definir ruta de tu modelo
+model_path = "/content/TFGWalid_EG.pth" 
+
+# Cargar el modelo desde la ruta especificada
+import torch
+from train_tools.models import MEDIARFormer
+
+# Definir los parámetros del modelo según tu configuración
+model_args = {
+    "classes": 3,
+    "decoder_channels": [1024, 512, 256, 128, 64],
+    "decoder_pab_channels": 256,
+    "encoder_name": 'mit_b5',
+    "in_channels": 3
+}
+
+# Crear una instancia del modelo
+model = MEDIARFormer(**model_args)
+
+# Cargar los pesos del modelo desde la ruta proporcionada
+weights = torch.load(model_path, map_location="cpu")
+model.load_state_dict(weights, strict=False)
+
+# Definir ruta de imágenes de entrada
+input_path = "/content/img/"  # Ruta de las imágenes
+
+# Definir ruta de salida para las predicciones
+output_path = "/content/img/"
+
+# Crear predictor para realizar las predicciones
+from core.MEDIAR import Predictor
+
+# Usar el predictor para hacer la predicción
+predictor = Predictor(model, "cuda:0", input_path, output_path, algo_params={"use_tta": True})
+_ = predictor.conduct_prediction()
+
+# Cargar y mostrar la imagen de predicción
+import skimage.io as io
+import numpy as np
+
+# Ejemplo de cómo cargar una de las predicciones generadas
+pred1 = io.imread(f"{output_path}/cell_00006_label.tiff")
+io.imshow(pred1, cmap="cividis")
+
+# Contar las células (excluyendo el fondo)
+cell_count = len(np.unique(pred1)) - 1  # Excluir el fondo
+print(f"\n{cell_count} Cells detected!")
