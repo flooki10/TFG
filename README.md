@@ -3,6 +3,7 @@
 
 # Segmentación automática de células en imágenes FISH
 _Proyecto de investigación y análisis de imágenes biomédicas_
+
 _Autores: Pedro Latorre Carmona, José Francisco Díez Pastor y Walid Sabhi_
 
 ---
