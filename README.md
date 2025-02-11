@@ -21,7 +21,7 @@ Para hacer más accesible esta solución tecnológica y simplificar el trabajo d
 ![img2](https://github.com/flooki10/TFG/blob/main/plataforma2.png)
 ![img3](https://github.com/flooki10/TFG/blob/main/plataforma3.png)
 
-### Superposición de la imagen segmentada sobre la imagen Groudtruth original
+### Superposición de la imagen segmentada sobre la imagen Groundtruth original
 
 ![Alt img](https://github.com/flooki10/TFG/blob/main/superposition.png)
 ---
